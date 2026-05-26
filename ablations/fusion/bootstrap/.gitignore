@@ -1,0 +1,7 @@
+# Generated compiler outputs and benchmark artifacts.
+/no_fusion/
+/horizontal_fusion/
+/vertical_fusion/
+/logs/
+/figs/
+/bootstrap_32Kslots_33levels_*_cerium_graph_*.dot*

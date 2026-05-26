@@ -1,0 +1,10 @@
+# Generated compiler outputs for each ablation configuration.
+/baseline/
+/cerium_opt/
+/cerium_schedule/
+/no_cross_chip_opt/
+
+# Generated benchmark and plotting artifacts.
+/logs/
+/figs/
+/MultiGPUPlots.pdf

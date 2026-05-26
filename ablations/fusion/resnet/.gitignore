@@ -1,0 +1,10 @@
+# Generated compiler outputs and benchmark artifacts.
+/no_fusion/
+/horizontal_fusion/
+/vertical_fusion/
+/logs/
+/figs/
+/resnet20_params.pkl
+/bootstrap_32K_33_*_cerium_graph_*.dot*
+/main_*_cerium_graph_*.dot*
+/relu_cerium_graph_*.dot*
