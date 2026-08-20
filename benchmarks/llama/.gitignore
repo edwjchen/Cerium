@@ -1,4 +1,5 @@
 llama_plaintexts/*
+llama_plaintexts*/*
 llama_ciphertexts/*
 outputs/*
 fhe_outputs/*

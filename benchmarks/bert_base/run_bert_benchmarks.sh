@@ -48,7 +48,7 @@ echo "Detected ${GPU_COUNT} GPU(s)."
 gpu_runs=()
 average_times=()
 failed_runs=0
-for gpus in 1 2 4; do
+for gpus in 1 2 4 8; do
     if (( gpus > GPU_COUNT )); then
         echo "Skipping ${gpus}-GPU benchmark: only ${GPU_COUNT} GPU(s) available."
         continue

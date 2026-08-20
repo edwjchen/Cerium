@@ -38,8 +38,7 @@ struct General {
       const LimbDataType **remapable_base, const size_t *args_remapables,
       const uint32_t *bases, const LimbDataType *modulii,
       const LimbDataType *barrett_ratios, const uint32_t *barrett_k,
-      const uint32_t **rotation_map,
-      const LimbDataType2 *inverse_power_of_roots_div_two);
+      const uint32_t **rotation_map);
   typedef const void (*int_function_t)(
       cudaStream_t &stream, LimbDataType **args_outputs,
       const LimbDataType **args_inputs, const uint32_t *bases,
@@ -81,8 +80,7 @@ struct CuGraph {
       const LimbDataType **remapable_base, const size_t *args_remapables,
       const uint32_t *bases, const LimbDataType *modulii,
       const LimbDataType *barrett_ratios, const uint32_t *barrett_k,
-      const uint32_t **rotation_map,
-      const LimbDataType2 *inverse_power_of_roots_div_two);
+      const uint32_t **rotation_map);
   typedef const void (*int_function_t)(
       cudaGraph_t &graph, cudaGraphNode_t &node0, cudaGraphNode_t &node1,
       LimbDataType **args_outputs, const LimbDataType **args_inputs,
@@ -122,12 +120,10 @@ void execute_ewi(void *function, const CUDA::StreamPtr &stream,
                  const size_t *args_remapables, const uint32_t *bases,
                  const LimbDataType *modulii,
                  const LimbDataType *barrett_ratios, const uint32_t *barrett_k,
-                 const uint32_t **rotation_map,
-                 const LimbDataType2 *inverse_power_of_roots_div_two) {
+                 const uint32_t **rotation_map) {
   auto fn = (General::elm_function_t)(function);
   fn(stream->stream_, args_outputs, args_inputs, args_scalars, remapable_base,
-     args_remapables, bases, modulii, barrett_ratios, barrett_k, rotation_map,
-     inverse_power_of_roots_div_two);
+     args_remapables, bases, modulii, barrett_ratios, barrett_k, rotation_map);
   CHECK_CUDA_ERROR();
 }
 
@@ -202,12 +198,11 @@ void execute_ewi(void *function, CUDA::GraphPtr &graph, CUDA::NodePtr &node0,
                  const size_t *args_remapables, const uint32_t *bases,
                  const LimbDataType *modulii,
                  const LimbDataType *barrett_ratios, const uint32_t *barrett_k,
-                 const uint32_t **rotation_map,
-                 const LimbDataType2 *inverse_power_of_roots_div_two) {
+                 const uint32_t **rotation_map) {
   auto fn = (CuGraph::elm_function_t)(function);
   fn(graph->graph_, node0->node_, args_outputs, args_inputs, args_scalars,
      remapable_base, args_remapables, bases, modulii, barrett_ratios, barrett_k,
-     rotation_map, inverse_power_of_roots_div_two);
+     rotation_map);
   CHECK_CUDA_ERROR();
 }
 

@@ -314,8 +314,7 @@ void Evaluator::fn_ewi(void *function, const CUDA::StreamPtr &stream,
               const_cast<const uint32_t *>(bases_device.get()),
               evaluator_context_->modulii_.get(),
               evaluator_context_->barrett_ratios_.get(),
-              evaluator_context_->barrett_k_.get(), rotations_map_device.get(),
-              evaluator_context_->inv_root_powers_div_two_uint2_.get());
+              evaluator_context_->barrett_k_.get(), rotations_map_device.get());
 
 }
 
@@ -358,8 +357,7 @@ void Evaluator::fn_ewi(void *function, CUDA::GraphPtr &graph,
               const_cast<const uint32_t *>(bases_device.get()),
               evaluator_context_->modulii_.get(),
               evaluator_context_->barrett_ratios_.get(),
-              evaluator_context_->barrett_k_.get(), rotations_map_device.get(),
-              evaluator_context_->inv_root_powers_div_two_uint2_.get());
+              evaluator_context_->barrett_k_.get(), rotations_map_device.get());
 
   args_vec.push_back(std::move(outputs_device));
   args_vec.push_back(std::move(inputs_device));
@@ -460,8 +458,7 @@ void Evaluator::fn_ewi(const CUDA::StreamPtr &stream,
               remapable_base, remapables_device, bases_device,
               evaluator_context_->modulii_.get(),
               evaluator_context_->barrett_ratios_.get(),
-              evaluator_context_->barrett_k_.get(), rotations_map_device,
-              evaluator_context_->inv_root_powers_div_two_uint2_.get());
+              evaluator_context_->barrett_k_.get(), rotations_map_device);
 
 }
 

@@ -78,7 +78,8 @@ def create_inputs(cerium_function_setup):
 SLOTS = 32*1024
 def run_bootstrap(use_cudagraph,generate_evalkeys,generate_plaintexts,gpus=1):
 
-    os.environ["CERIUM_RUNTIME_NUM_ITERS"] = str(10)
+    # Keep the historical default while allowing experiments to select a run count.
+    os.environ.setdefault("CERIUM_RUNTIME_NUM_ITERS", "10")
 
     OutScale = {}
     if gpus == 1:

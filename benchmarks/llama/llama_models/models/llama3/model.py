@@ -623,17 +623,13 @@ class TransformerBlock(nn.Module):
         out = h + self.feed_forward(self.ffn_norm(h))
         if self.layer_id == check_block:
             data_sample = get_data_sample()
-            print(f"Checking DataSample: {data_sample} Block:{check_block}")
             ReferenceInputs = {}
             reference_file = FHE_OUTPUTS_DIR / f"sample{data_sample}_block{self.layer_id}.pkl"
             with reference_file.open("rb") as f:
                 ReferenceInputs.update(pickle.load(f))
             out_ = torch.stack([(torch.tensor(ReferenceInputs[f"out{i}"],dtype=torch.complex128)*pow(-1j,i%2)).real for i in range(16)])
             out_ = row_unpack_nx4096(out_,out.shape[1])
-            print("out Diff: ", torch.mean((out-out_)**2))
-            print(out)
             out = out_
-            print(out)
         return out
 
 

@@ -159,54 +159,6 @@ def compute_homomorphic_mod_ds_vec(x,x_level,scale,initScale,HK_deg,HK_r,config,
     return (z,z.level())
 
 
-def compute_homomorphic_mod_normal(x,x_level,scale,initScale,HK_deg,HK_r,config,SetScalar=False):
-    level = x.level()
-    doubleScale = 2*scale
-
-    f0 = get_bootstrap_inputs(f'{config}_f0',doubleScale,level,scalar=SetScalar)
-    f1 = get_bootstrap_inputs(f'{config}_f1',doubleScale,level,scalar=SetScalar)
-    x0 = x*f0
-    x1 = x*f1
-
-    x0 = x0.conjugate() + x0
-    x1 = x1.conjugate() + x1
-    x0 = x0.doubleRescale()
-    x1 = x1.doubleRescale()
-
-    level = level + 2
-    qg_K = get_bootstrap_inputs(f'{config}_qg_K',4*scale - initScale,level,scalar=SetScalar)
-    x0 = x0 * qg_K
-    x1 = x1 * qg_K
-    x0 = x0.rescale(scale).rescale(scale)
-    x1 = x1.rescale(scale).rescale(scale)
-
-    level = level + 2
-    f1by4K = get_bootstrap_inputs(f'{config}_f1_4K',x0.scale(),level,scalar=SetScalar)
-    x0 = x0  + f1by4K
-    x1 = x1  + f1by4K
-
-    val0 = compute_chebyshev(config,x0,HK_deg,scale,SetScalar)
-    val1 = compute_chebyshev(config,x1,HK_deg,scale,SetScalar)
-
-    for i in range(HK_r):
-        val0 = val0 * val0
-        val1 = val1 * val1
-        val0 = val0.relinearize()
-        val1 = val1.relinearize()
-        val0 = val0.rescale(scale).rescale(scale)
-        val1 = val1.rescale(scale).rescale(scale)
-        val_level = val0.level()
-        m_one = get_bootstrap_inputs(f"{config}_m_one_r_"+str(i),doubleScale,val_level,scalar=SetScalar)
-        val0 = (val0 + val0) + m_one
-        val1 = (val1 + val1) + m_one
-
-    piqx0 = get_bootstrap_inputs(f'{config}_piqx0',initScale - val0.scale() + scale,val_level,scalar=SetScalar)
-    piqx1 = get_bootstrap_inputs(f'{config}_piqx1',initScale - val0.scale() + scale,val_level,scalar=SetScalar)
-
-    z = (val0*piqx0) + (val1*piqx1)
-    level = val_level #+ 1
-    return (z,level)
-
 def compute_chebyshev_new_ds_pmu_novec(config,x,HK_deg,SCALE):
     if HK_deg != 30:
         raise Exception("")
@@ -347,13 +299,10 @@ def bootstrap(x,config,availableLevels,setScalar=True):
     if(config == "b33"):
         return bootstrap_32K_33lvl_t1(x,availableLevels)
     elif(config == "b35"):
-        print(f"Bootstrapping with config: {config} {BootstrapGPUs}")
         return bootstrap_32K_35lvl_t1(x,availableLevels,gpus=BootstrapGPUs)
     elif(config == "b35_2"):
-        print(f"Bootstrapping with config: {config} {BootstrapGPUs}")
         return bootstrap_32K_35lvl_vec_t1(x,availableLevels,gpus=BootstrapGPUs)
     elif(config == "b35_1gpu"):
-        print(f"Bootstrapping with config: {config} 1")
         return bootstrap_32K_35lvl_t1(x,availableLevels,gpus=1)
     else:
         raise ValueError("Invalid config for Boootstrapping")
@@ -528,12 +477,10 @@ def bootstrap_32K_35lvl_vec_t1(x,availableLevels,gpus):
     else:
         raise Exception("Unsupported Number of Bootstrap GPUs")
 
-    print("Calling Bootstrap with GPUs:", gpus)
     outputs = CeriumFunctionCall(__bootstrap_32K_35lvl_t1_vec_function__[gpus],{"x":x})
     if gpus == 1:
         pass
     else: 
-        print("Partition, ", psize, pid)
         Partition(psize,pid)
 
     z0,z1 = outputs["z0"],outputs["z1"]
@@ -566,7 +513,6 @@ def bootstrap_32K_35lvl_t1(x,availableLevels,gpus):
     else:
         raise Exception("Unsupported Number of Bootstrap GPUs")
 
-    print("Calling Bootstrap with GPUs:", gpus)
 
     outputs = CeriumFunctionCall(__bootstrap_32K_35lvl_t1_vec_function__[gpus],{"x":x})
     z = outputs["z0"]
@@ -643,61 +589,6 @@ def hanki_approx(K,n,r,e):
             NodesFlat.append(t_div/K)
             Points.append(math.cos(2*math.pi*t_div))
     return Chebyshev.fit(NodesFlat,Points,len(NodesFlat) - 1,[-1/2**r,1/2**r]) 
-
-def get_hanki_raw_inputs_old(prefix,scale_factor,level,HK_K,HK_deg,HK_r,HK_e):
-
-    hanki_cos2r = hanki_approx(HK_K,HK_deg,HK_r,HK_e).coef
-
-    raw_inputs = {}
-    scales = [[] for _ in range(HK_deg+1)]
-    levels = [[] for _ in range(HK_deg+1)]
-    rescale_reqd = [True for i in range(HK_deg+1)]
-    scales[1] = scale_factor
-    levels[1] = level
-    rescale_reqd[1] = False
-
-    val_level = levels[1]
-    val_scale = scale_factor
-
-    if HK_deg & (HK_deg - 1) == 0:
-        raise Exception("Unimplemented where HK_deg is power of 2")
-
-    val_out_level = int(val_level - 2*np.floor(np.log2(HK_deg)))
-
-    raw_inputs[f"{prefix}_hk_{1}"] = (hanki_cos2r[1],(Primes[val_out_level-1]*Primes[val_out_level-2]*Primes[val_out_level-3]*Primes[val_out_level-4]))
-
-    for i in range (2,HK_deg+1):
-        if i % 2 == 0:
-            if rescale_reqd[i//2]:
-                lvl = levels[i//2]
-                scales[i//2] = scales[i//2]/(Primes[lvl-1]*Primes[lvl-2])
-                levels[i//2] = lvl - 2
-                rescale_reqd[i//2] = False
-            levels[i] = levels[i//2]
-            scales[i] = scales[i//2]*scales[i//2]
-            raw_inputs[f"{prefix}_m_one_{i}"] = (-1,scales[i])
-        else:
-            if rescale_reqd[i//2]:
-                lvl = levels[i//2]
-                scales[i//2] = scales[i//2]/(Primes[lvl-1]*Primes[lvl-2])
-                levels[i//2] = lvl - 2
-                rescale_reqd[i//2] = False
-            if rescale_reqd[i//2 + 1]:
-                lvl = levels[i//2 + 1]
-                scales[i//2 + 1] = scales[i//2 +1]/(Primes[lvl-1]*Primes[lvl-2])
-                levels[i//2 + 1] = lvl - 2
-                rescale_reqd[i//2 + 1] = False
-            lvl = levels[i//2 + 1]
-            levels[i] = levels[i//2 + 1]
-            scales[i] = scales[i//2]*scales[i//2 + 1]
-            raw_inputs[f"{prefix}_rf{i}"] = (1,scales[i]/scales[1])
-        
-        raw_inputs[f"{prefix}_hk_{i}"] = (hanki_cos2r[i],val_scale/scales[i]*(Primes[val_out_level-1]*Primes[val_out_level-2]*Primes[val_out_level-3]*Primes[val_out_level-4]))
-
-    val_level = val_out_level - 4
-    raw_inputs[f"{prefix}_hk_0"] = (hanki_cos2r[0],val_scale)
-
-    return (raw_inputs,scale_factor,val_level)
 
 def nearest_power_of_2_geq(x):
     return 1<<(x-1).bit_length()

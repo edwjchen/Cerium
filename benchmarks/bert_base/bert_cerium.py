@@ -508,10 +508,14 @@ def softmax_128x128_vec2_function():
         TestFunctionOutput(f"inverse",inv)
         s = e * inv
         s = s.relinearize()
-        s = s.rescale()
         s = BreakVector(s)
-        for n in range(2):
-            FunctionOutput(f"s{n}",s[n])
+        s[0] = s[0].rescale()
+        FunctionOutput(f"s{0}",s[0])
+        Partition(2,0)
+        s[1] = Receive(s[1])
+        Partition(1,1)
+        s[1] = s[1].rescale()
+        FunctionOutput(f"s{1}",Receive(s[1]))
 
     global __softmax_128x128_vec2_function__
     __softmax_128x128_vec2_function__ = function
@@ -1038,17 +1042,29 @@ def attention_o_function_8gpu():
     function = CeriumFunction("attention_o_8gpu",8,0)
     with function:
 
-        ContextLayerStacked = [None for _ in range(3)]
-        def stream_fn(sid,ContextLayerStacked):
+        ContextLayer = [None for _ in range(6)]
+        def stream_fn(sid,ContextLayer):
             if sid > 2:
                 return
-            ContextLayer = [CiphertextArgument(f"ContextLayer{2*sid + i}",3*SCALE,5) for i in range(2)]
 
-            ContextLayerStacked[sid] = ContextLayer[0] + (ContextLayer[1] << -64)
+            def stream_fn_internal(sidj,ContextLayer):
+                if sidj > 1: return
+                ContextLayer[2*sid + sidj] = CiphertextArgument(f"ContextLayer{2*sid + sidj}",3*SCALE,5) << (-64 * sidj)
+            
+            CeriumStream(1,2,stream_fn_internal,ContextLayer)
 
-        streamSize = 1
+            # ContextLayerStacked[sid] = ContextLayer[0] + (ContextLayer[1] << -64)
+
+        streamSize = 2
         numStreams = 3
-        CeriumStream(streamSize,numStreams,stream_fn,ContextLayerStacked)
+        CeriumStream(streamSize,numStreams,stream_fn,ContextLayer)
+
+        ContextLayerStacked = [ContextLayer[i] + ContextLayer[i + 1] for i in range(0, 6, 2)]
+        ContextLayerStacked = [Receive(ContextLayerStacked[i]) for i in range(3)]
+
+        Partition(4,0)
+
+
 
         Wo = [[[PeriodicPlaintextInput(f"attention_Wo_{n}_{j}_{i}",2*SCALE,ContextLayerStacked[0].level(),256,remapable=True) for i in range(-128 * (1 + (j // 3)),128 * (1 + (j // 3)))] for j in range(6)] for n in range(3)]
         O = matmul_ct128x768_pt768x768_new(ContextLayerStacked,Wo)
@@ -1415,10 +1431,6 @@ def attention_8gpu(H,block):
         
         print(CurrentPartitionSize(), CurrentPartitionID())
 
-        Probs[0] = Receive(Probs[0])
-        Probs[1] = Receive(Probs[1])
-
-
         def stream_fn3(sid3,Probs,ContextLayer):
 
             print(CurrentPartitionSize(), CurrentPartitionID())
@@ -1446,7 +1458,7 @@ def attention_8gpu(H,block):
 
     Attention = [None for _ in range(3)]
 
-    # O,A = attention_o_8gpu(H,ContextLayer,block)
+    O,A = attention_o_8gpu(H,ContextLayer,block)
 
 
     def stream_fn2(sid,Attention):
@@ -1468,7 +1480,7 @@ def attention_8gpu(H,block):
 
     streamSize = 1 
     numStreams = 1
-    # CeriumStream(streamSize,numStreams,stream_fn2,Attention)
+    CeriumStream(streamSize,numStreams,stream_fn2,Attention)
 
     return Attention
 
@@ -1860,6 +1872,71 @@ def ffn_up_4gpu(H,block):
     outputs = CeriumFunctionCall(__ffn_up_4gpu_function__,{f"H{i}":H[i] for i in range(3)},block)
     return [outputs[f"output{i}"] for i in range(12)]
 
+__ffn_up_8gpu_function__ = None
+def ffn_up_8gpu_function():
+
+    function = CeriumFunction("ffn_up_8gpu",8,0)
+    with function:
+
+
+        def stream_fn1(sid,H):
+            if sid != 0:
+                return
+            for i in range(3):
+                H[i] = CiphertextArgument(f"H{i}",3*SCALE,5)
+
+
+        streamSize = 1
+        numStreams = 1
+        H = [None for _ in range(3)]
+        CeriumStream(streamSize,numStreams,stream_fn1,H)
+
+        H = [Receive(H[i]) for i in range(3)]
+
+        outputs = [None for _ in range(12)]
+
+        def stream_fn2(sid,outputs):
+            if sid > 3:
+                return
+            k = sid
+            Wi = [[[PeriodicPlaintextInput(f"ffn_Wi_{3*k + n}_{j}_{i}",2*SCALE,H[0].level(),256,remapable=True) for i in range(-128*(1 + j//3),128*(1 + j//3))] for j in range(6)] for n in range(3)]
+            res_ = matmul_ct128x768_pt768x768_new(H,Wi)
+
+            for n in range(3):
+                r = res_[n]
+                r = r.doubleRescale()
+                Bi = PeriodicPlaintextInput(f"ffn_Bi_{3*k + n}",r.scale(),r.level(),256,remapable=True)
+                r = r + Bi
+                r = r.rescale()
+                outputs[3*k + n] = r
+                # FunctionOutput(f"output{3*k + n}",r)
+        
+
+        streamSize = 1
+        numStreams = 4
+        CeriumStream(streamSize,numStreams,stream_fn2,outputs)
+        outputs = [Receive(outputs[i]) for i in range(12)]
+        
+        def stream_fn3(sid,outputs):
+            if sid > 5:
+                return
+            FunctionOutput(f"output{2*sid}",outputs[2*sid])
+            FunctionOutput(f"output{2*sid + 1}",outputs[2*sid + 1])
+
+
+        streamSize = 1
+        numStreams = 6
+        CeriumStream(streamSize,numStreams,stream_fn3,outputs)
+
+
+    global __ffn_up_8gpu_function__
+    __ffn_up_8gpu_function__ = function
+
+def ffn_up_8gpu(H,block):
+    outputs = CeriumFunctionCall(__ffn_up_8gpu_function__,{f"H{i}":H[i] for i in range(3)},block)
+    return [outputs[f"output{i}"] for i in range(12)]
+
+
 
 __ffn_down_1gpu_function__ = None
 def ffn_down_1gpu_function():
@@ -2041,6 +2118,82 @@ def ffn_down_4gpu(H,ffn_gelu,block):
     ffn_residue = [outputs[f"ffn_residue{i}"] for i in range(3)]
     return ffn_down, ffn_residue
 
+__ffn_down_8gpu_function__ = None
+def ffn_down_8gpu_function():
+
+    function = CeriumFunction("ffn_down_8gpu",8,0)
+    with function:
+
+
+        ffn_gelu = [None for i in range(12)]
+        def stream_fn_input(sid,ffn_gelu):
+            if sid > 5: return
+            ffn_gelu[2*sid] = CiphertextArgument(f"ffn_gelu{2*sid}",3*SCALE,5)
+            ffn_gelu[2*sid + 1] = CiphertextArgument(f"ffn_gelu{2*sid + 1}",3*SCALE,5)
+        
+        streamSize = 1
+        numStreams = 6
+        CeriumStream(streamSize,numStreams,stream_fn_input,ffn_gelu)
+        ffn_gelu = [Receive(ffn_gelu[i]) for i in range(12)]
+
+        def stream_fn(sid,ffn_gelu,ffn_down):
+            if sid > 3:
+                return
+            k = sid
+
+            Wi = [[[PeriodicPlaintextInput(f"ffn_Wo_{3*k + n}_{j}_{i}",2*SCALE,ffn_gelu[0].level(),256,remapable=True) for i in range(-128*(1+j//3),128*(1+j//3))] for j in range(6)] for n in range(3)]
+
+            ffn_down[k] = matmul_ct128x768_pt768x768_new(ffn_gelu[3*k : 3*k + 3],Wi) 
+
+        streamSize = 1
+        numStreams = 4
+        ffn_down = [None for _ in range(numStreams)]
+        CeriumStream(streamSize,numStreams,stream_fn,ffn_gelu,ffn_down)
+        ffn_down[0] = [ffn_down[0][i] + ffn_down[1][i] for i in range(3)]
+        ffn_down[0] = [ffn_down[0][i] + ffn_down[2][i] for i in range(3)]
+        ffn_down[0] = [ffn_down[0][i] + ffn_down[3][i] for i in range(3)]
+        ffn_down = ffn_down[0]
+
+        def stream_fn2(sid):
+            if sid > 0:
+                return
+            H = [CiphertextArgument(f"H{i}",3*SCALE,5) for i in range(3)]
+            h_rf = PlaintextInput("ffn_h_rescale_factor",2*SCALE,H[0].level() - 1,SCALAR)
+            for i in range(3):
+                r = ffn_down[i]
+                r = r.rescale()
+                Bi = PeriodicPlaintextInput(f"ffn_Bo_{i}",r.scale(),r.level(),256,remapable=True)
+                r = r + Bi
+                r = r.rescale()
+                FunctionOutput(f"ffn_down{i}",r)
+                h = H[i]
+                h = h.rescale()
+                h = h * h_rf
+                h = h.rescale()
+                while h.level() != r.level():
+                    h = h.modswitch()
+                r = r + h
+                r = r.rescale()
+                FunctionOutput(f"ffn_residue{i}",r)
+                # res[i] = r
+
+        streamSize = 1
+        numStreams = 1
+        CeriumStream(streamSize,numStreams,stream_fn2)
+            
+    global __ffn_down_8gpu_function__
+    __ffn_down_8gpu_function__ = function
+
+def ffn_down_8gpu(H,ffn_gelu,block):
+    if __ffn_down_8gpu_function__ is None:
+        raise Exception("ffn_down_8gpu_function not defined")
+    args = {f"H{i}":H[i] for i in range(3)}
+    args.update({f"ffn_gelu{i}":ffn_gelu[i] for i in range(12)})
+    outputs = CeriumFunctionCall(__ffn_down_8gpu_function__,args,block)
+    ffn_down = [outputs[f"ffn_down{i}"] for i in range(3)]
+    ffn_residue = [outputs[f"ffn_residue{i}"] for i in range(3)]
+    return ffn_down, ffn_residue
+
 def ffn_1gpu(H,block):
     ffn_up = ffn_up_1gpu(H,block)
     for i in range(12):
@@ -2137,6 +2290,45 @@ def ffn_4gpu(H,block):
     CeriumStream(streamSize,numStreams,stream_fn2)
 
     return ffn_residue
+
+
+def ffn_8gpu(H,block):
+    ffn_up = ffn_up_8gpu(H,block)
+    
+    ffn_gelu = [None for i in range(12)]
+    def stream_fn(sid,ffn_gelu):
+        if sid > 5:
+            return
+        i = 2*sid
+        ffn_up[i] = bootstrap(ffn_up[i],"b33",19)
+        ffn_up[i+1] = bootstrap(ffn_up[i+1],"b33",19)
+        TestOutput(f"ffn_up{i}",ffn_up[i])
+        TestOutput(f"ffn_up{i+1}",ffn_up[i+1])
+        ffn_gelu[i:i+2] = gelu_vec(ffn_up[i:i+2])
+        TestOutput(f"ffn_gelu{i}",ffn_gelu[i])
+        TestOutput(f"ffn_gelu{i+1}",ffn_gelu[i+1])
+
+    streamSize = 1
+    numStreams = 6
+    CeriumStream(streamSize,numStreams,stream_fn,ffn_gelu)
+
+    ffn_down, ffn_residue = ffn_down_8gpu(H,ffn_gelu,block)
+
+
+    def stream_fn2(sid):
+        if sid > 0:
+            return
+        for i in range(3):
+            TestOutput(f"ffn_down{i}",ffn_down[i])
+            ffn_residue[i] = bootstrap(ffn_residue[i],"b33",16) * PlaintextInput("ffn_residue_bs_rescale_factor",0,18,SCALAR)
+            TestOutput(f"ffn_residue{i}",ffn_residue[i])
+    
+    streamSize = 1
+    numStreams = 1
+    CeriumStream(streamSize,numStreams,stream_fn2)
+
+    return ffn_residue
+
 
 def sign(x,prefix):
     xLevel = x.level()
@@ -2515,7 +2707,7 @@ def main(num_gpus,prefix):
     elif num_gpus == 4:
         program = bert_program_4gpu(12)
     elif num_gpus == 8:
-        program = bert_program_8gpu(1)
+        program = bert_program_8gpu(12)
 
     def get_bcus(fname):
         return 128
@@ -2605,10 +2797,12 @@ def main(num_gpus,prefix):
     skip += ["ffn_up_4gpu"]
     skip += ["ffn_down_4gpu"]
 
+    skip += ["softmax_128x128_vec2"]
     skip += ["attention_qkv_8gpu"]
     skip += ["attention_o_8gpu"]
     skip += ["ffn_up_8gpu"]
     skip += ["ffn_down_8gpu"]
+
 
     skip += ["main"]
     skip = []

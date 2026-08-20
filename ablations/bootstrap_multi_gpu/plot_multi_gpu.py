@@ -78,7 +78,7 @@ def plot_bar_graph_multi_gpu(output_file: Path) -> None:
         )
         previous_speedups = speedups
 
-    ax.set_xticks(x_positions, labels=["1xB200", "2xB200", "4xB200", "8xB200"])
+    ax.set_xticks(x_positions, labels=["1x", "2x", "4x", "8x"])
     ax.set_ylabel("Speedup over 1 GPU")
     ax.set_ylim(0, 3)
     ax.grid(axis="y", linestyle=":")

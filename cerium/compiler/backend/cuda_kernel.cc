@@ -1368,8 +1368,7 @@ std::ostream &FusedKernel::write_function(std::ostream &s, int indent_depth) {
         "LimbDataType ** remapables_base, const size_t * args_remapables, "
         "const uint32_t * bases, const LimbDataType * modulii, const "
         "LimbDataType * barrett_ratios, const uint32_t * barrett_k, const "
-        "uint32_t ** rotation_map, const LimbDataType2 * "
-        "inverse_power_of_roots_div_two)";
+        "uint32_t ** rotation_map)";
     constexpr std::string_view function_end = "}";
 
     s << indent(indent_depth) << function_definition_ << "{ \n";
@@ -2643,8 +2642,7 @@ std::ostream &FusedKernel::write_function_cugraph(std::ostream &s,
         "LimbDataType * args_scalars, const LimbDataType ** remapables_base, "
         "const size_t * args_remapables, const uint32_t * bases, const "
         "LimbDataType * modulii, const LimbDataType * barrett_ratios, const "
-        "uint32_t * barrett_k, const uint32_t ** rotation_map, const "
-        "LimbDataType2 * inverse_power_of_roots_div_two)";
+        "uint32_t * barrett_k, const uint32_t ** rotation_map)";
     constexpr std::string_view function_end = "}";
 
     s << indent(indent_depth) << function_definition_cugraph_ << "{ \n";
@@ -2653,7 +2651,7 @@ std::ostream &FusedKernel::write_function_cugraph(std::ostream &s,
       << limb_blocks_.size() << ",1);\n";
     s << indent(indent_depth) << "dim3 blockSize(BLOCK_DIM_X,1,1);\n";
     s << indent(indent_depth);
-    s << "void *args1[11] = {(void *)&args_outputs,(void *)&args_inputs,(void "
+    s << "void *args1[10] = {(void *)&args_outputs,(void *)&args_inputs,(void "
          "*)&args_scalars, (void *)&remapables_base, (void *)&args_remapables, "
          "(void *)&bases, (void *)&modulii, (void *)&barrett_ratios, (void "
          "*)&barrett_k, (void *)&rotation_map};\n";

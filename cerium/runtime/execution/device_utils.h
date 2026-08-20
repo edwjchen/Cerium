@@ -33,8 +33,7 @@ void execute_ewi(void *function, const CUDA::StreamPtr &stream,
                  const size_t *args_remapables, const uint32_t *bases,
                  const LimbDataType *modulii,
                  const LimbDataType *barrett_ratios, const uint32_t *barrett_k,
-                 const uint32_t **rotation_map,
-                 const LimbDataType2 *inverse_power_of_roots_div_two);
+                 const uint32_t **rotation_map);
 
 void execute_int(void *function, const CUDA::StreamPtr &stream,
                  LimbDataType **args_outputs, const LimbDataType **args_inputs,
@@ -80,8 +79,7 @@ void execute_ewi(void *function, CUDA::GraphPtr &graph, CUDA::NodePtr &node0,
                  const size_t *args_remapables, const uint32_t *bases,
                  const LimbDataType *modulii,
                  const LimbDataType *barrett_ratios, const uint32_t *barrett_k,
-                 const uint32_t **rotation_map,
-                 const LimbDataType2 *inverse_power_of_roots_div_two);
+                 const uint32_t **rotation_map);
 
 void execute_int(void *function, CUDA::GraphPtr &graph, CUDA::NodePtr &node0,
                  CUDA::NodePtr &node1, LimbDataType **args_outputs,

@@ -1970,17 +1970,16 @@ def main(gpus,num_blocks,prefix):
         program = llama_program_multi_gpu(gpus=num_gpus,num_blocks=num_blocks)
     functions = program.get_functions()
     skip = []
-
-    if num_blocks < 33:
-
-        if num_gpus > 1:
-            skip += ["bootstrap_32K_35lvl_t1_vec"]
-            skip += ["bootstrap_32K_33lvl_t1_vec"]
-            skip += ["softmax_128x128_vec"]
-            skip += ["matmul_ct128x128_ct128x128_transpose"]
-            skip += ["matmul_ct128x128_ct128x128"]
-            skip += ["silu"]
     
+    if os.environ.get('LLAMA_SKIP_GLOBAL_FUNCTIONS','1') == '1':
+        skip += ["bootstrap_32K_35lvl_t1_vec"]
+        skip += ["bootstrap_32K_33lvl_t1_vec"]
+        skip += ["softmax_128x128_vec"]
+        skip += ["matmul_ct128x128_ct128x128_transpose"]
+        skip += ["matmul_ct128x128_ct128x128"]
+        skip += ["silu"]
+
+    if os.environ.get('LLAMA_SKIP_GPU_LOCAL_FUNCTIONS','1') == '1':
         skip += [f"attention_matmul_qkv_{gpus}gpu"]
         skip += [f"attention_matmul_o_{gpus}gpu"]
         skip += [f"attention_score_softmax_{gpus}gpu"]
@@ -1998,10 +1997,8 @@ def main(gpus,num_blocks,prefix):
 
     for name,f in functions.items():
         compile = True
-        for s in skip:
-            if s in name:
-                compile = False
-                break
+        if name in skip:
+            compile = False
         if not compile:
             continue
         print(f"Compiling: {name}")

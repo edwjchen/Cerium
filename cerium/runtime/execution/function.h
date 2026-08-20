@@ -70,6 +70,12 @@ public:
     bool perform_uvm_prefetching_back_to_host{false};
     uint64_t num_iters{1};
     bool use_prefetch_stream{true};
+    // When using one explicit-copy staging buffer per called function, wait
+    // only for that function's previous consumer before overwriting it.
+    bool prefetch_wait_per_function{false};
+    // Queue one additional prefetch when the first copy is below this size.
+    // Zero disables the extra lookahead.
+    uint64_t small_prefetch_lookahead_bytes{0};
     bool all_ops_in_same_stream{false};
     bool no_cross_chip_comm{false};
     bool no_cross_chip_drm{false};
@@ -362,11 +368,21 @@ private:
 
   std::vector<std::vector<PrefetchArgs>> prefetch_args_;
 
+  // The most recent main-stream event that protects each called function's
+  // explicit-copy staging buffer, indexed by partition.
+  std::vector<std::unordered_map<CeriumFunction *, CUDA::EventPtr>>
+      prefetch_last_use_events_;
+  // Functions with a copy queued but not yet consumed. A function has one
+  // explicit-copy staging buffer, so it cannot be queued twice concurrently.
+  std::vector<std::unordered_set<CeriumFunction *>> prefetch_queued_functions_;
+
   std::vector<CUDA::StreamPtr> streams_;
   std::vector<CUDA::StreamPtr> prefetch_streams_;
   std::vector<CUDA::GraphPtr> graphs_;
   std::vector<CUDA::GraphExecPtr> graph_exec_;
   std::vector<uint8_t> graphs_init_;
+  // Whether each partition's CUDA graph contains an NCCL collective node.
+  std::vector<uint8_t> graphs_have_collectives_;
 
   const Context &context_;
   std::size_t coeff_count;

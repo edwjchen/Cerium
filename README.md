@@ -23,6 +23,8 @@ This artifact accompanies the paper *Cerium: A Multi-GPU Framework for Terabyte-
 | `benchmarks/bert_base/` | BERT-Base benchmark |
 | `benchmarks/llama/` | Llama 3-8B benchmark |
 | `ablations/` | Multi-GPU scheduling and fusion ablations |
+| `experiments/kernel_count/` | Bootstrap kernel-count and duration-CDF experiment |
+| `experiments/llama_timeline/` | Showing a timeline of Compute and Data Movement Overlap |
 
 `benchmarks/llama/llama_models` is a submodule with Llama helper code.
 
@@ -155,6 +157,45 @@ bash run_resnet_benchmarks.sh
 ```
 
 This writes `ResNetFusion.pdf`. 
+
+
+## Bootstrap kernel-count experiment
+
+This experiment profiles the 1xGPU bootstrap. It uses Nsight Systems tracing to record each kernel's start and end time, reports the kernel count, and plots the kernel-duration CDF.
+
+Compile the bootstrap benchmark first, then run:
+
+```bash
+cd benchmarks/bootstrap_32K
+bash compile.sh
+cd ../../experiments/kernel_count
+bash run_kernel_count.sh
+```
+
+Results are written to `experiments/kernel_count/artifacts/`: `kernel_count.txt`
+contains the count, `kernel_times.csv` contains per-kernel timestamps, and
+`kernel_duration_cdf.png` contains the CDF. The complete run output is saved in
+`kernel_count.log`.
+
+## Llama timeline experiment
+
+This experiment profiles one encrypted Llama transformer block on four GPUs and plots compute, NCCL, and weight H→D-copy activity.
+
+Complete the normal Llama benchmark setup first, including the licensed
+checkpoint, generated inputs, compiled 4-GPU/1-block program, remappable
+plaintexts, and serialized ciphertext inputs. Then run:
+
+```bash
+cd experiments/llama_timeline
+bash run_llama_timeline.sh --data_sample 0
+```
+
+Results are written to `experiments/llama_timeline/artifacts/`, including the
+Nsight Systems report, SQLite export, timestamp CSVs, and
+`llama_4gpu_1block_timeline.png`. See
+[`experiments/llama_timeline/README.md`](experiments/llama_timeline/README.md)
+for details.
+
 
 
 ## License

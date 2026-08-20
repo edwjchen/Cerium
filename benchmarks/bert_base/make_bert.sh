@@ -39,11 +39,17 @@ for function_name in \
     pool_classify_layer \
     softmax_128x128_vec \
     layernorm_att_1gpu \
-    layernorm_ffn_1gpu; do
+    layernorm_ffn_1gpu \
+    bootstrap_32K_35lvl_t1_vec_2  \
+    softmax_128x128_vec2 \
+    ; do
     compile_all "${function_name}" "${CERIUM_DIR}" "${COMPILED_DIR}"
 done
 
-for gpus in 1 2 4; do
+
+compile_all  bootstrap_32K_35lvl_t1_vec_2 "${CERIUM_DIR}" "${COMPILED_DIR}"
+compile_all  softmax_128x128_vec2 "${CERIUM_DIR}" "${COMPILED_DIR}"
+for gpus in 1 2 4 8; do
     for function_name in attention_qkv attention_o ffn_up ffn_down; do
         compile_all "${function_name}_${gpus}gpu" "${CERIUM_DIR}" "${COMPILED_DIR}"
     done
@@ -52,3 +58,4 @@ done
 compile_all "main_1gpu_12" "${CERIUM_DIR}" "${COMPILED_DIR}"
 compile_all "main_2gpu_12" "${CERIUM_DIR}" "${COMPILED_DIR}"
 compile_all "main_4gpu_12" "${CERIUM_DIR}" "${COMPILED_DIR}"
+compile_all "main_8gpu_12" "${CERIUM_DIR}" "${COMPILED_DIR}"

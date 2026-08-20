@@ -115,6 +115,8 @@ void CeriumFunction::create_program_multithread() {
   load_function_map(code_file_base, partitions);
   kernel_args_.resize(partitions);
   prefetch_args_.resize(partitions);
+  prefetch_last_use_events_.resize(partitions);
+  prefetch_queued_functions_.resize(partitions);
 
   std::atomic<size_t> num_threads_ready = 0;
   std::atomic<size_t> num_threads_complete = 0;
@@ -400,11 +402,19 @@ void CeriumFunction::prefetch_threadfn(const std::size_t tid,
   if (called_cerium_function->remapables_type_ == RemapablesType::ExplicitCopy &&
       perform_prefetching && prefetch_args.pointer != nullptr &&
       prefetch_args.size > 0) {
-    if (wait_for_event != nullptr) {
+    auto copy_wait_event = wait_for_event;
+    if (runtime_options_.prefetch_wait_per_function) {
+      const auto last_use = prefetch_last_use_events_.at(tid).find(
+          called_cerium_function);
+      copy_wait_event = last_use == prefetch_last_use_events_.at(tid).end()
+                            ? nullptr
+                            : last_use->second;
+    }
+    if (copy_wait_event != nullptr) {
       LOG(logger, INFO) << called_cerium_function->function_name() << "[" << tid << "]:"
                         << "Prefetch Thread Waiting for Event Before Copying\n"
                         << std::flush;
-      CUDA::streamWaitEvent(prefetch_stream, wait_for_event);
+      CUDA::streamWaitEvent(prefetch_stream, copy_wait_event);
     }
     LOG(logger, INFO) << called_cerium_function->function_name() << "[" << tid << "]:"
                       << "Explicity Copying Remapable Inputs to Device Memory\n"
@@ -443,9 +453,35 @@ void CeriumFunction::run_program_multithread_threadfn(
   }
   size_t prefetches_issued = 0;
 
-  if (perform_prefetching && prefetch_args_[tid].size() > 0) {
-    prefetch_threadfn(tid, stream, prefetch_stream, prefetches_issued, nullptr);
-    prefetches_issued++;
+  auto issue_prefetches = [&](const CUDA::EventPtr &wait_for_event) {
+    const auto issue_one = [&]() -> std::optional<size_t> {
+      if (prefetches_issued >= prefetch_args_[tid].size()) {
+        return std::nullopt;
+      }
+      const auto &prefetch_args = prefetch_args_[tid][prefetches_issued];
+      // Do not overwrite a function's sole explicit-copy staging buffer before
+      // its already-queued invocation has consumed it.
+      if (prefetch_queued_functions_[tid].find(
+              prefetch_args.cerium_function) !=
+          prefetch_queued_functions_[tid].end()) {
+        return std::nullopt;
+      }
+      prefetch_threadfn(tid, stream, prefetch_stream, prefetches_issued,
+                        wait_for_event);
+      prefetch_queued_functions_[tid].insert(prefetch_args.cerium_function);
+      return prefetches_issued++;
+    };
+
+    const auto first_prefetch = issue_one();
+    if (first_prefetch &&
+        prefetch_args_[tid][*first_prefetch].size <
+            runtime_options_.small_prefetch_lookahead_bytes) {
+      issue_one();
+    }
+  };
+
+  if (perform_prefetching && !prefetch_args_[tid].empty()) {
+    issue_prefetches(nullptr);
   }
 
   for (auto &kernel_args : kernel_args_.at(tid)) {
@@ -474,6 +510,9 @@ void CeriumFunction::run_program_multithread_threadfn(
       auto &args = kernel_args.args;
       assert(args.size() > 4);
       auto called_cerium_function = (CeriumFunction *)kernel_args.args[0];
+      if (perform_prefetching) {
+        prefetch_queued_functions_[tid].erase(called_cerium_function);
+      }
       assert((int64_t)args[1] == -1);
       auto remapable_base_ptr = (LimbDataType *)kernel_args.args[2];
       if (called_cerium_function->remapables_type_ != RemapablesType::ExplicitCopy &&
@@ -544,9 +583,11 @@ void CeriumFunction::run_program_multithread_threadfn(
                           << "]:" << "Recording Event after launching kernels\n"
                           << std::flush;
         CUDA::eventRecord(kernel_args.event_end, stream);
-        prefetch_threadfn(tid, stream, prefetch_stream, prefetches_issued,
-                          kernel_args.event_end);
-        prefetches_issued++;
+        if (runtime_options_.prefetch_wait_per_function) {
+          prefetch_last_use_events_.at(tid)[called_cerium_function] =
+              kernel_args.event_end;
+        }
+        issue_prefetches(kernel_args.event_end);
       }
       assert((int64_t)args[count] == -1);
       count++;
@@ -642,6 +683,7 @@ void CeriumFunction::create_cuda_graph() {
   CUDA::deviceSynchronize();
   LOG(logger, INFO) << "Creating Graphs:\n" << std::flush;
   init_graphs(partitions, registers);
+  graphs_have_collectives_.assign(partitions, false);
   LOG(logger, INFO) << "Created Graphs:\n" << std::flush;
   load_function_map(code_file_base, partitions);
   LOG(logger, INFO) << "Loaded Function Map:\n" << std::flush;
@@ -831,6 +873,7 @@ void CeriumFunction::create_cuda_graph() {
         if (no_cross_chip_comm || no_cross_chip_drm) {
           continue;
         }
+        graphs_have_collectives_[tid] = true;
         auto node0 = CUDA::createNode();
         auto node1 = CUDA::createNode();
         std::vector<LimbT::Element_t *> scatter_ptrs_;
@@ -854,6 +897,7 @@ void CeriumFunction::create_cuda_graph() {
         if (no_cross_chip_comm || no_cross_chip_ags) {
           continue;
         }
+        graphs_have_collectives_[tid] = true;
         auto node0 = CUDA::createNode();
         auto node1 = CUDA::createNode();
         std::vector<LimbT::Element_t *> scatter_ptrs_;
@@ -877,6 +921,7 @@ void CeriumFunction::create_cuda_graph() {
         if (no_cross_chip_comm || no_cross_chip_ard) {
           continue;
         }
+        graphs_have_collectives_[tid] = true;
         auto node0 = CUDA::createNode();
         auto node1 = CUDA::createNode();
         std::vector<LimbT::Element_t *> scatter_ptrs_;
@@ -922,10 +967,20 @@ void CeriumFunction::create_cuda_graph() {
         auto call_subgraph_node = CUDA::createSubgraphNode(
             graphs_[tid], called_cerium_function->graphs_[tid]);
 
+        const bool child_has_collectives =
+            called_cerium_function->graphs_have_collectives_.at(tid);
+        graphs_have_collectives_[tid] |= child_has_collectives;
+        if (prev_nccl && no_comm_false_deps == 0 && child_has_collectives) {
+          CUDA::addSingleEdge(graphs_[tid], prev_nccl, call_subgraph_node);
+        }
 
         // Keep the wrapper nodes connected even when this call has no arguments.
         CUDA::addSingleEdge(graphs_[tid], node0, call_subgraph_node);
         CUDA::addSingleEdge(graphs_[tid], call_subgraph_node, node1);
+        // Ordinary execution enqueues argument copies on one stream. Preserve
+        // that order in the graph too: sibling copies may otherwise execute
+        // concurrently, which is unsafe if mapped argument storage aliases.
+        auto previous_input_copy = node0;
         for (auto &[i, l] : called_cerium_function->function_args_input_local_[tid]) {
           auto name_in_func = i;
           auto term_here = fn.function_args_map.at(i);
@@ -933,19 +988,28 @@ void CeriumFunction::create_cuda_graph() {
               graphs_[tid], l->data(),
               get_pointer_from_term(term_here, false, tid),
               context_.n() * sizeof(LimbT::Element_t));
-          CUDA::addSingleEdge(graphs_[tid], node0, memcpyNode);
+          CUDA::addSingleEdge(graphs_[tid], previous_input_copy, memcpyNode);
           CUDA::addSingleEdge(graphs_[tid], memcpyNode, call_subgraph_node);
+          previous_input_copy = memcpyNode;
         }
 
+        auto previous_output_copy = call_subgraph_node;
         for (auto &[o, l] : called_cerium_function->function_args_output_local_[tid]) {
           auto name_in_func = o;
-          auto term_here = fn.function_args_map.at(o);
+          // A caller may intentionally omit an output it does not consume.
+          // Match the non-graph Call path by not creating a copy in that case.
+          auto it = fn.function_args_map.find(o);
+          if (it == fn.function_args_map.end()) {
+            continue;
+          }
+          auto &term_here = it->second;
 
           auto memcpyNode = CUDA::createMemcpyDeviceToDeviceNode(
               graphs_[tid], get_pointer_from_term(term_here, true, tid),
               l->data(), context_.n() * sizeof(LimbT::Element_t));
-          CUDA::addSingleEdge(graphs_[tid], call_subgraph_node, memcpyNode);
+          CUDA::addSingleEdge(graphs_[tid], previous_output_copy, memcpyNode);
           CUDA::addSingleEdge(graphs_[tid], memcpyNode, node1);
+          previous_output_copy = memcpyNode;
         }
 
         // auto last_use = fn_last_use[tid][function_name];
@@ -960,6 +1024,13 @@ void CeriumFunction::create_cuda_graph() {
         // XXX: Need to make sure functions with internal false dependencies are handled correctly
         // XXX: For now, treat all functions as dependent on each other
         fn_last_use[tid][""] = node1;
+        // A collective-bearing child must also order the next direct collective
+        // in this graph. node1 is downstream of the child graph (and of any
+        // output copies), so the existing direct-collective dependency path
+        // makes the next NCCL operation wait for the call to finish.
+        if (child_has_collectives) {
+          prev_nccl = node1;
+        }
         in = node0;
         out = node1;
 

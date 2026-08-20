@@ -72,6 +72,12 @@ CeriumFunction::RuntimeOptions CeriumFunction::RuntimeOptions::FromEnvironment()
       Cerium::Runtime::Utils::get_uint_env_variable("CERIUM_RUNTIME_NUM_ITERS", 1);
   options.use_prefetch_stream = Cerium::Runtime::Utils::get_uint_env_variable(
       "CERIUM_RUNTIME_USE_PREFETCH_STREAM", 1);
+  options.prefetch_wait_per_function =
+      Cerium::Runtime::Utils::get_uint_env_variable(
+          "CERIUM_RUNTIME_PREFETCH_WAIT_PER_FUNCTION", 1);
+  options.small_prefetch_lookahead_bytes =
+      Cerium::Runtime::Utils::get_uint_env_variable(
+          "CERIUM_RUNTIME_SMALL_PREFETCH_LOOKAHEAD_BYTES", 1024*1024*1024);
   options.all_ops_in_same_stream = Cerium::Runtime::Utils::get_uint_env_variable(
       "CERIUM_RUNTIME_ALL_OPS_IN_STREAM", 0);
   options.no_cross_chip_comm =

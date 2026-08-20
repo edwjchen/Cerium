@@ -78,7 +78,7 @@ if [[ ! -f "${SCRIPT_DIR}/packed_params/params_rte_block12.pkl" ]]; then
         "${PYTHON}" bert_params_torch.py --output-dir packed_params --task-name rte
 fi
 
-for gpus in 1 2 4; do
+for gpus in 1 2 4 8; do
     docker exec -w "${SCRIPT_DIR}" "${CONTAINER_NAME}" \
         "${PYTHON}" bert_cerium.py --gpus "${gpus}"
 done

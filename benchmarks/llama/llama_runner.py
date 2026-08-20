@@ -167,7 +167,6 @@ def get_f3_inputs_new(inputScale,finalOutScale,level,prefix):
     OutputScale = finalOutScale
     OutputScale = OutputScale/2
     coeffScales[7] = OutputScale * Primes[level-1] * Primes[level-2] * Primes[level-3]* Primes[level-4] * Primes[level-5] * Primes[level-6] / (xPowScales[4] * xPowScales[2] * xPowScales[1])
-    print("f3 coeffscales7 : ",coeffScales[7],math.log2(coeffScales[7]))
 
 
     coeffScales[5] = OutputScale * Primes[level-1] * Primes[level-2] * Primes[level-5] * Primes[level-6] / (xPowScales[4] * xPowScales[1])
@@ -177,7 +176,6 @@ def get_f3_inputs_new(inputScale,finalOutScale,level,prefix):
     for i in [1,3,5,7]:
         Inputs[f"{prefix}_f3_coeff{i}_{level}"] = (coeffs[i],coeffScales[i]) 
         Inputs[f"{prefix}_f3_coeff{i}_{level}_im"] = (np.array([coeffs[i]*1j]*SLOTS),coeffScales[i]) 
-        print(f"{prefix}_f3_coeff{i}_{level}")
 
     OutputScale = OutputScale*2
     OutputScales[f"{prefix}_x_{level}"] = OutputScale
@@ -213,8 +211,6 @@ def get_exp_inputs_bootstrap(inputScale,level,BootstrapScaleDiv):
     scale2 = np.exp((scale1 + denom1)/(2**itersPostBootstrap))
     scale2 = scale2/BootScaleDiv
     scale2 = np.log(scale2)
-    print("scale1",scale1,np.log2(np.exp(scale1)))
-    print("scale2",scale2,np.log2(np.exp(scale2)))
 
     level2 = inputLevel
     denom2 = 0
@@ -225,7 +221,6 @@ def get_exp_inputs_bootstrap(inputScale,level,BootstrapScaleDiv):
         assert level2 >= 2 , "Level Must be Greater than 2"
 
     inpScale = np.exp((scale2 + denom2)/(2**(ITERS - itersPostBootstrap)))
-    print("inpScale",inpScale,np.log2(inpScale))
 
     expOneBy2NScale = inpScale*Primes[level-1]*Primes[level-2]/inputScale
 
@@ -298,7 +293,6 @@ def get_isqrt_inputs_no_exp(inputScale,level,BootstrapScaleDiv,BootstrapScaleDiv
         OutputScales[f"{oprefix}_isqrt_y_{i}"] = yscale 
         OutputScales[f"{oprefix}_isqrt_y_bs{i}"] = yscale 
         OutputScales[f"xy3_{i}"] = yscale 
-        print(np.log2(yscale))
 
     Inputs[f"{prefix}_isqrt_y_bootstrap_sf"] = (1, BootstrapScaleDivIsqrt)
     yscale = yscale * BootstrapScaleDivIsqrt
@@ -337,8 +331,6 @@ def get_isqrt_inputs_rmsnorm(inputScale,level,BootstrapScaleDiv,BootstrapScaleDi
     scale2 = np.exp((scale1 + denom1)/(2**itersPostBootstrap))
     scale2 = scale2/BootScaleDiv
     scale2 = np.log(scale2)
-    print("scale1",scale1,np.log2(np.exp(scale1)))
-    print("scale2",scale2,np.log2(np.exp(scale2)))
 
     level2 = level-2
     denom2 = 0
@@ -349,7 +341,6 @@ def get_isqrt_inputs_rmsnorm(inputScale,level,BootstrapScaleDiv,BootstrapScaleDi
         assert level2 >= 2 , "Level Must be Greater than 2"
 
     inpScale = np.exp((scale2 + denom2)/(2**(ITERS - itersPostBootstrap)))
-    print("inpScale",inpScale,np.log2(inpScale))
 
     expOneBy2NScale = inpScale*Primes[level-1]*Primes[level-2]/inputScale
 
@@ -405,7 +396,6 @@ def get_isqrt_inputs_rmsnorm(inputScale,level,BootstrapScaleDiv,BootstrapScaleDi
         OutputScales[f"{oprefix}_isqrt_y_{i}"] = yscale 
         OutputScales[f"{oprefix}_isqrt_y_bs{i}"] = yscale 
         OutputScales[f"xy3_{i}"] = yscale 
-        print(np.log2(yscale))
 
     Inputs[f"{prefix}_isqrt_y_bootstrap_sf"] = (1, BootstrapScaleDivIsqrt)
     yscale = yscale * BootstrapScaleDivIsqrt
@@ -922,7 +912,7 @@ def print_outputs(outputs, layer, data_sample, prefix=""):
                 print(f"{prefix}{key}[{i}]",output[i])
         print("============================")
 
-def run_llama_blocks(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,cudagraphs,data_sample,block_start,num_blocks):
+def run_llama_blocks(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,cudagraphs,sample,block_start,num_blocks):
     raw_inputs = {}
     OutScale = {}
 
@@ -934,22 +924,22 @@ def run_llama_blocks(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,c
 
     referenceInputs = {}
     try:
-        with open(f'reference_outputs_{data_sample}/reference_outputs_layer{block_start}.pkl', 'rb') as f:
+        with open(f'reference_outputs_{sample}/reference_outputs_layer{block_start}.pkl', 'rb') as f:
             referenceInputs.update(pickle.load(f))
     except Exception as e:
-        print(f"Error loading reference inputs for block {block_start} data_sample:{data_sample}: {e}")
+        print(f"Error loading reference inputs for block {block_start} data_sample:{sample}: {e}")
     finally:
-        print(f"Loaded reference inputs for block {block_start} data_sample:{data_sample}")
+        print(f"Loaded reference inputs for block {block_start} data_sample:{sample}")
 
 
     referenceOutputs = {}
     try:
-        with open(f'reference_outputs_{data_sample}/reference_outputs_layer{block_start}.pkl', 'rb') as f:
+        with open(f'reference_outputs_{sample}/reference_outputs_layer{block_start}.pkl', 'rb') as f:
             referenceOutputs.update(pickle.load(f))
     except Exception as e:
-        print(f"Error loading reference outputs for block {block_start} data_sample:{data_sample}: {e}")
+        print(f"Error loading reference outputs for block {block_start} data_sample:{sample}: {e}")
     finally:
-        print(f"Loaded reference outputs for block {block_start} data_sample:{data_sample}")
+        print(f"Loaded reference outputs for block {block_start} data_sample:{sample}")
 
 
     seed = [0,1,2,3,4,5,6,7]
@@ -1034,8 +1024,19 @@ def run_llama_blocks(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,c
     create_inputs(cerium_function_setups)
 
     use_cudagraphs = True if cudagraphs else False
-    config = {"default" : {"use_cudagraph" : f"{use_cudagraphs}"},
+    # config = {"default" : {"use_cudagraph" : f"{use_cudagraphs}"},
+    #           f"{main_name}" : {"use_cudagraph" : f"{False}"},
+    #           }
+
+    config = {"default" : {"use_cudagraph" : f"{False}"},
               f"{main_name}" : {"use_cudagraph" : f"{False}"},
+              f"bootstrap_32K_35lvl_t1_vec" : {"use_cudagraph" : f"{use_cudagraphs}"},
+              f"bootstrap_32K_33lvl_t1_vec" : {"use_cudagraph" : f"{use_cudagraphs}"},
+              f"matmul_ct128x128_ct128x128_transpose" : {"use_cudagraph" : f"{use_cudagraphs}"},
+              f"matmul_ct128x128_ct128x128" : {"use_cudagraph" : f"{use_cudagraphs}"},
+            #   f"silu" : {"use_cudagraph" : f"{use_cudagraphs}"},
+                f"softmax_128x128_vec" : {"use_cudagraph" : f"{use_cudagraphs}"},
+                f"attention_score_softmax_{gpus}gpu" : {"use_cudagraph" : f"{use_cudagraphs}"},
               }
 
 
@@ -1045,31 +1046,37 @@ def run_llama_blocks(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,c
             "remapable_inputs_base" : f"{plaintexts_base_name}/attention_matmul_qkv",
             "remapable_keys" : str({f"block{l}" : f"block{block_start + l}" for l in range(num_blocks)}),
             "remapables_use_uvm" : f"{USE_UVM_REMAPABLES}",
+            "use_cudagraph" : f"{use_cudagraphs}",
         },
         f"attention_matmul_o_{gpus}gpu": {
             "remapable_inputs_base" : f"{plaintexts_base_name}/attention_matmul_o",
             "remapable_keys" : str({f"block{l}" : f"block{block_start + l}" for l in range(num_blocks)}),
             "remapables_use_uvm" : f"{USE_UVM_REMAPABLES}",
+            "use_cudagraph" : f"{use_cudagraphs}",
         },
         f"rmsnorm_att_{gpus}gpu": {
             "remapable_inputs_base" : f"{plaintexts_base_name}/rmsnorm_att",
             "remapable_keys" : str({f"block{l}" : f"block{block_start + l}" for l in range(num_blocks)}),
             "remapables_use_uvm" : f"{USE_UVM_REMAPABLES}",
+            "use_cudagraph" : f"{use_cudagraphs}",
         },
         f"ffn_matmul_vw_{gpus}gpu": {
             "remapable_inputs_base" : f"{plaintexts_base_name}/ffn_matmul_vw",
             "remapable_keys" : str({f"block{l}" : f"block{block_start + l}" for l in range(num_blocks)}),
             "remapables_use_uvm" : f"{USE_UVM_REMAPABLES}",
+            "use_cudagraph" : f"{use_cudagraphs}",
         },
         f"ffn_matmul_o_{gpus}gpu": {
             "remapable_inputs_base" : f"{plaintexts_base_name}/ffn_matmul_o",
             "remapable_keys" : str({f"block{l}" : f"block{block_start + l}" for l in range(num_blocks)}),
             "remapables_use_uvm" : f"{USE_UVM_REMAPABLES}",
+            "use_cudagraph" : f"{use_cudagraphs}",
         },
         f"rmsnorm_ffn_{gpus}gpu": {
             "remapable_inputs_base" : f"{plaintexts_base_name}/rmsnorm_ffn",
             "remapable_keys" : str({f"block{l}" : f"block{block_start + l}" for l in range(num_blocks)}),
             "remapables_use_uvm" : f"{USE_UVM_REMAPABLES}",
+            "use_cudagraph" : f"{use_cudagraphs}",
         },
     }
 
@@ -1083,88 +1090,91 @@ def run_llama_blocks(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,c
 
 
 
-    data_sample = 0
+    # data_samples = [0,1,2,3,4]
+    data_samples = [sample]
     io_generator = cerium_runtime.IOGenerator(context)
 
-    if GENERATE_SAMPLES:
+
+    for data_sample in data_samples:
+
+        if GENERATE_SAMPLES:
+
+            sample_inputs = {}
+            fheInputs = {}
+            if block_start > 0:
+                try:
+                    with open(f'fhe_outputs/sample{data_sample}_block{block_start-1}.pkl', 'rb') as f:
+                        fheInputs.update(pickle.load(f))
+                except Exception as e:
+                    print(f"Error loading fhe inputs for block {block_start-1} data_sample:{data_sample}: {e}")
+                finally:
+                    print(f"Loaded reference fhe for block {block_start-1} data_sample:{data_sample}")
+                input_key = "out"
+                base = 1
+            else:
+                try:
+                    with open(f'llama_models/llama_inputs/sample{data_sample}_prompt.pkl', 'rb') as f:
+                        fheInputs.update(pickle.load(f))
+                except Exception as e:
+                    print(f"Error loading fhe inputs for block {block_start} data_sample:{data_sample}: {e}")
+                finally:
+                    print(f"Loaded reference fhe for block {block_start} data_sample:{data_sample}")
+                input_key = "rmsnorm_att_input"
+                base = 1j
 
 
-        sample_inputs = {}
-        fheInputs = {}
-        if block_start > 0:
+
+            AttentionMask = {}
             try:
-                with open(f'fhe_outputs/sample{data_sample}_block{block_start-1}.pkl', 'rb') as f:
-                    fheInputs.update(pickle.load(f))
+                with open(f'llama_models/llama_inputs/sample{data_sample}_attention_mask.pkl', 'rb') as f:
+                    AttentionMask.update(pickle.load(f))
             except Exception as e:
-                print(f"Error loading fhe inputs for block {block_start-1} data_sample:{data_sample}: {e}")
+                print(f"Error loading attention mask for block {block_start} data_sample:{data_sample}: {e}")
             finally:
-                print(f"Loaded reference fhe for block {block_start-1} data_sample:{data_sample}")
-            input_key = "out"
-            base = 1
-        else:
-            try:
-                with open(f'llama_models/llama_inputs/sample{data_sample}_prompt.pkl', 'rb') as f:
-                    fheInputs.update(pickle.load(f))
-            except Exception as e:
-                print(f"Error loading fhe inputs for block {block_start} data_sample:{data_sample}: {e}")
-            finally:
-                print(f"Loaded reference fhe for block {block_start} data_sample:{data_sample}")
-            input_key = "rmsnorm_att_input"
-            base = 1j
+                print(f"Loaded attention mask for block {block_start} data_sample:{data_sample}")
 
 
+            BootstrapScaleDiv = 1 << 6
+            for i in range(16):
+                sample_inputs[f"rmsnorm_att_input{i}"] = (np.array(fheInputs[f"{input_key}{i}"])*pow(base,(i%2)),Primes[15]*Primes[14]/BootstrapScaleDiv)
 
-        AttentionMask = {}
+            sample_inputs[f"att_mask"] = (AttentionMask[f"att_mask"],Primes[8]*Primes[7])
+
+
+            sample_inputs_wrapper = cerium_runtime.RawInputsWrapper(sample_inputs)
+
+            Path(ciphertext_inputs_base_name).mkdir(parents=True, exist_ok=True)
+            io_generator.generate_and_serialize_ciphertexts(f"{ciphertext_inputs_base_name}/enc_data_sample{data_sample}_block{block_start}",f"{base_name}/{main_name}/program_inputs",sample_inputs_wrapper,encryptor_context)
+            io_generator.generate_and_serialize_ciphertexts(f"{ciphertext_inputs_base_name}/enc_mask_sample{data_sample}",f"{base_name}/{softmax_name}/program_inputs",sample_inputs_wrapper,encryptor_context)
+
+            del sample_inputs_wrapper
+
+        enc_prompt = io_generator.deserialize_ciphertexts(context,f"{ciphertext_inputs_base_name}/enc_data_sample{data_sample}_block{block_start}")
+        enc_mask = io_generator.deserialize_ciphertexts(context,f"{ciphertext_inputs_base_name}/enc_mask_sample{data_sample}")
+
+        start_time = time.time()
+        main_cerium_function.copy_ciphertext_inputs_to_gpu(f"{base_name}/{main_name}/inputs",gpus,enc_prompt)
+        softmax_cerium_function.copy_ciphertext_inputs_to_gpu(f"{base_name}/{softmax_name}/inputs",gpus,enc_mask)
+        program.run()
+        encrypted_outputs = main_cerium_function.get_program_outputs()
+        end_time = time.time()
+
+        outputs = {}
+        for k,v in encrypted_outputs.items():
+            outputs[k] = encryptor.decrypt_and_decode(v,OutScale[k])
+
+
+        block_end = block_start + num_blocks - 1
+        print_outputs(outputs, block_end, data_sample,prefix=f"block{block_end}_")
+
         try:
-            with open(f'llama_models/llama_inputs/sample{data_sample}_attention_mask.pkl', 'rb') as f:
-                AttentionMask.update(pickle.load(f))
+            Path(f"fhe_outputs").mkdir(parents=True, exist_ok=True)
+            with open(f'fhe_outputs/sample{data_sample}_block{block_end}.pkl', 'wb') as f:
+                pickle.dump(outputs, f)
         except Exception as e:
-            print(f"Error loading attention mask for block {block_start} data_sample:{data_sample}: {e}")
+            print(f"Error dumping outputs for {block_end} data_sample:{data_sample}: {e}")
         finally:
-            print(f"Loaded attention mask for block {block_start} data_sample:{data_sample}")
-
-
-        BootstrapScaleDiv = 1 << 6
-        for i in range(16):
-            sample_inputs[f"rmsnorm_att_input{i}"] = (np.array(fheInputs[f"{input_key}{i}"])*pow(base,(i%2)),Primes[15]*Primes[14]/BootstrapScaleDiv)
-
-        sample_inputs[f"att_mask"] = (AttentionMask[f"att_mask"],Primes[8]*Primes[7])
-
-
-        sample_inputs_wrapper = cerium_runtime.RawInputsWrapper(sample_inputs)
-
-        Path(ciphertext_inputs_base_name).mkdir(parents=True, exist_ok=True)
-        io_generator.generate_and_serialize_ciphertexts(f"{ciphertext_inputs_base_name}/enc_data_sample{data_sample}_block{block_start}",f"{base_name}/{main_name}/program_inputs",sample_inputs_wrapper,encryptor_context)
-        io_generator.generate_and_serialize_ciphertexts(f"{ciphertext_inputs_base_name}/enc_mask_sample{data_sample}",f"{base_name}/{softmax_name}/program_inputs",sample_inputs_wrapper,encryptor_context)
-
-        del sample_inputs_wrapper
-
-    enc_prompt = io_generator.deserialize_ciphertexts(context,f"{ciphertext_inputs_base_name}/enc_data_sample{data_sample}_block{block_start}")
-    enc_mask = io_generator.deserialize_ciphertexts(context,f"{ciphertext_inputs_base_name}/enc_mask_sample{data_sample}")
-
-    start_time = time.time()
-    main_cerium_function.copy_ciphertext_inputs_to_gpu(f"{base_name}/{main_name}/inputs",gpus,enc_prompt)
-    softmax_cerium_function.copy_ciphertext_inputs_to_gpu(f"{base_name}/{softmax_name}/inputs",gpus,enc_mask)
-    program.run()
-    encrypted_outputs = main_cerium_function.get_program_outputs()
-    end_time = time.time()
-
-    outputs = {}
-    for k,v in encrypted_outputs.items():
-        outputs[k] = encryptor.decrypt_and_decode(v,OutScale[k])
-
-
-    block_end = block_start + num_blocks - 1
-    print_outputs(outputs, block_end, data_sample,prefix=f"block{block_end}_")
-
-    try:
-        Path(f"fhe_outputs").mkdir(parents=True, exist_ok=True)
-        with open(f'fhe_outputs/sample{data_sample}_block{block_end}.pkl', 'wb') as f:
-            pickle.dump(outputs, f)
-    except Exception as e:
-        print(f"Error dumping outputs for {block_end} data_sample:{data_sample}: {e}")
-    finally:
-        print("")
+            print("")
 
 SLOTS = 32768
 LVL = 51
@@ -1174,8 +1184,10 @@ if __name__ == '__main__':
     parser.add_argument('--gpus', type=int,default=1)
     parser.add_argument('--cudagraphs', type=str_to_bool, default=True, help="Enable CUDAGraphs")
     parser.add_argument('--num_blocks', type=int, required=True)
+    parser.add_argument('--data_sample', type=int, default=0,
+                        help="Index of the packed prompt input to run (default: 0)")
 
     args = parser.parse_args()
 
-    data_sample = 0
-    main(args.gpus,data_sample,args.block_start,args.cudagraphs,args.num_blocks)
+    main(args.gpus, args.data_sample, args.block_start, args.cudagraphs,
+         args.num_blocks)
