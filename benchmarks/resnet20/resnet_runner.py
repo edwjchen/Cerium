@@ -16,6 +16,7 @@
 import random
 import pickle
 import numpy as np
+from pathlib import Path
 import argparse
 from primes import *
 from bootstrap import *
@@ -102,7 +103,7 @@ def create_inputs(cerium_function_setup):
         generate_inputs(setup)
 
 
-def run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,gpus,num_samples):
+def run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,data_dir,gpus,num_samples):
 
     raw_inputs["image"] = ([0]*SLOTS,1 << 20)
 
@@ -156,6 +157,10 @@ def run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,gpus,num_samples):
     del raw_inputs
     del raw_inputs_wrapper
 
+    data_values, data_labels = load_dataset(data_dir)
+    if num_samples <= 0 or num_samples > len(data_labels):
+        raise ValueError(f"--num-samples must be between 1 and {len(data_labels)}")
+
     samples = [i for i in range(num_samples)]
     Preds = []
     Labels = []
@@ -168,7 +173,7 @@ def run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,gpus,num_samples):
 
 
     for image_id in samples:
-        image_inputs, label = load_image(image_id)
+        image_inputs, label = load_image(image_id, data_values, data_labels)
 
         image_inputs_wrapper = cerium_runtime.RawInputsWrapper(image_inputs)
 
@@ -204,9 +209,10 @@ def run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,gpus,num_samples):
     print(results)
     for i in range(len(Preds)):
         print(f"{i}: {Preds[i]} {Labels[i]} {int(Preds[i]==Labels[i])}")
+    print(f"Final Accuracy: {correct}/{total} = {correct / total:.6f}")
 
 
-def load_image(image_id):
+def load_image_legacy(image_id):
     image_inputs = {}
     assert image_id >= 0 and image_id < 25 , "Image ID must be between 0 and 24"
     with open("testFile/test_values_25.txt", "r") as f:
@@ -238,7 +244,36 @@ def load_image(image_id):
     return image_inputs, label
 
 
-def main(use_cudagraphs,base_dir,gpus,num_samples):
+def load_dataset(data_dir):
+    test_dir = Path(data_dir) / "testFile"
+    values_path = test_dir / "test_values.txt"
+    if not values_path.is_file():
+        values_path = test_dir / "test_values_25.txt"
+    labels_path = test_dir / "test_label.txt"
+    if not values_path.is_file() or not labels_path.is_file():
+        raise FileNotFoundError(f"Expected ResNet inputs under {test_dir}")
+
+    values = np.loadtxt(values_path, dtype=np.float32)
+    labels = np.atleast_1d(np.loadtxt(labels_path, dtype=np.int64))
+    if values.size != labels.size * 32 * 32 * 3:
+        raise ValueError("ResNet input values do not match the number of labels")
+    return values, labels
+
+
+def load_image(image_id, values, labels):
+    offset = 32 * 32 * 3 * image_id
+    image = np.zeros(SLOTS, dtype=np.float32)
+    image[:32 * 32 * 3] = values[offset:offset + 32 * 32 * 3]
+
+    init_p = 8
+    for i in range(SLOTS // init_p, SLOTS):
+        image[i] = image[i % (SLOTS // init_p)]
+
+    image /= 40.0
+    return {"image": (image.tolist(), ImgScale)}, int(labels[image_id])
+
+
+def main(use_cudagraphs,base_dir,data_dir,gpus,num_samples):
 
     print("Starting Program")
 
@@ -261,7 +296,7 @@ def main(use_cudagraphs,base_dir,gpus,num_samples):
         OutScale[f"relu_{stage}_final"] = Primes[3]*Primes[2]/ImgScaleDiv
         OutScale[f"relu_{stage}_final_bootstrap"] = Primes[l-1]*Primes[l-2] / ImgScaleDiv
 
-    run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,gpus,num_samples)
+    run_resnet(raw_inputs,OutScale,use_cudagraphs,base_dir,data_dir,gpus,num_samples)
 
     return
 
@@ -284,9 +319,10 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-cg','--use_cudagraphs', type=str_to_bool,  nargs='?', const=True, default=True, help="Whether to use CUDA graphs")
     parser.add_argument('--base-dir', type=str, default="outputs", help="Base directory for compiled outputs")
+    parser.add_argument('--data-dir', type=Path, default=Path('.'), help="Directory containing testFile/ inputs")
     parser.add_argument('--gpus','-g', type=int, default=1)
-    parser.add_argument('--num_samples', type=int, default=5)
+    parser.add_argument('--num-samples', '--num_samples', dest='num_samples', type=int, default=5)
 
 
     args = parser.parse_args()
-    main(args.use_cudagraphs,args.base_dir,args.gpus,args.num_samples)
+    main(args.use_cudagraphs,args.base_dir,args.data_dir,args.gpus,args.num_samples)

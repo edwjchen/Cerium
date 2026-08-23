@@ -92,13 +92,34 @@ bash compile.sh
 bash run_resnet_benchmarks.sh
 ```
 
+To download the complete ResNet evaluation dataset and report encrypted-inference accuracy, run:
+
+```bash
+cd benchmarks/resnet20
+bash run_resnet_accuracy.sh --data-dir resnet_cifar --gpus 8
+```
+
+The script extracts the dataset into `resnet_cifar/` and evaluates accuracy over every downloaded sample using eight GPUs by default.
+
 ### BERT-Base
+
+To report the benchmark performance across GPUs, run:
 
 ```bash
 cd benchmarks/bert_base
 bash compile.sh
 bash run_bert_benchmarks.sh
 ```
+
+To download the complete BERT evaluation dataset and report encrypted-inference accuracy, run:
+
+```bash
+cd benchmarks/bert_base
+bash run_bert_accuracy.sh --data-dir bert_rte --num-samples 277 --gpus 8
+```
+
+The script extracts the dataset into `bert_rte/` and evaluates accuracy over all 277 samples using eight GPUs by default.
+
 
 ### Llama 3.1-8B
 

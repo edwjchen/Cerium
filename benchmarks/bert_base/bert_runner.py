@@ -706,7 +706,7 @@ def get_pool_classify_io():
 
 
 
-def main(num_gpus,use_cudagraphs):
+def main(num_gpus, use_cudagraphs, num_samples, data_dir):
     secretKey = generate_secret_key(SLOTS,32768)
     ephemeralKey = generate_secret_key(SLOTS,32)
     raw_inputs = {}
@@ -727,7 +727,7 @@ def main(num_gpus,use_cudagraphs):
     bootstrap_inputs.update(get_bootstrap_runner_inputs("b33",16))
     raw_inputs.update(bootstrap_inputs)
 
-    run_bert(raw_inputs,OutScale,secretKey,ephemeralKey,num_gpus,use_cudagraphs)
+    run_bert(raw_inputs,OutScale,secretKey,ephemeralKey,num_gpus,use_cudagraphs,num_samples,data_dir)
 
 def str_to_bool(value):
     """ Convert common string representations of truth values to boolean. """
@@ -809,7 +809,8 @@ def create_inputs(cerium_function_setup):
     for setup in cerium_function_setup:
         generate_inputs(setup)
 
-def run_bert(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,use_cudagraphs):
+def run_bert(raw_inputs_main, OutScale_main, secretKey, ephemeralKey,
+    gpus, use_cudagraphs, num_samples, data_dir):
 
     num_blocks = 12
     seed = [0,1,2,3,4,5,6,7]
@@ -907,7 +908,7 @@ def run_bert(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,use_cudag
 
     GENERATE_REMAPABLES = True
 
-    cerium_function_setups.append(create_cerium_function_setup(base_name,f"attention_qkv_{gpus}gpu",GENERATE_EVALKEYS,GENERATE_PLAINTEXTS))
+    cerium_function_setups.append(create_cerium_function_setup(base_name,f"attention_qkv_{gpus}gpu",GENERATE_EVALKEYS2,GENERATE_PLAINTEXTS2))
     cerium_function_setups.append(create_cerium_function_setup(base_name,f"attention_o_{gpus}gpu",GENERATE_EVALKEYS2,GENERATE_PLAINTEXTS2))
     cerium_function_setups.append(create_cerium_function_setup(base_name,f"layernorm_att_1gpu",GENERATE_EVALKEYS,GENERATE_PLAINTEXTS))
     cerium_function_setups.append(create_cerium_function_setup(base_name,f"bootstrap_32K_35lvl_t1_vec_1",GENERATE_EVALKEYS,GENERATE_PLAINTEXTS))
@@ -954,11 +955,23 @@ def run_bert(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,use_cudag
     main_cerium_function = cerium_functions_map[f"{main_name}"]
     softmax_cerium_function = cerium_functions_map[f"{softmax_name}"]
 
-    data_dir = Path(".")
-    labels_file = np.load(data_dir / 'inputs' / 'labels.npy')
-    samples = list(range(len(labels_file)))
-    samples = samples[0:10]
-    samples = samples[0:5]
+    data_dir = Path(data_dir).expanduser().resolve()
+    labels_path = data_dir / 'inputs' / 'labels.npy'
+    if not labels_path.is_file():
+        raise FileNotFoundError(
+            f"Could not find labels at {labels_path}. "
+            "--data-dir must contain an inputs/ directory."
+        )
+
+    labels_file = np.load(labels_path)
+    if num_samples <= 0:
+        raise ValueError("--num-samples must be greater than zero")
+    if num_samples > len(labels_file):
+        raise ValueError(
+            f"Requested {num_samples} samples, but {data_dir} contains only "
+            f"{len(labels_file)} labels."
+        )
+    samples = list(range(num_samples))
     Preds = []
     Confs = []
     pbar = tqdm.tqdm(range(len(samples)))
@@ -1019,7 +1032,7 @@ def run_bert(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,use_cudag
             print("Actual     : ",label)
             correct += (argmax == label)
             accuracy = correct / (total + 1)
-            print("Running Accuuracy: ",accuracy)
+            print("Running Accuracy: ",accuracy)
 
             results["accuracy"] = accuracy
             Preds.append(argmax)
@@ -1033,14 +1046,27 @@ def run_bert(raw_inputs_main,OutScale_main,secretKey,ephemeralKey,gpus,use_cudag
     print(results)
     for i in range(len(Preds)):
         print(f"{i}: {Preds[i]} {Labels[i]} {(Preds[i]==Labels[i])}")
+    print(f"Final Accuracy: {correct}/{total} = {correct / total:.6f}")
 
 SLOTS = 32768
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpus', type=int,default=1,choices=[1,2,4,8], help="Number of GPUs to use")
     parser.add_argument('--use_cudagraphs', type=str_to_bool, default=True, help="Whether to use CUDA graphs for execution")
+    parser.add_argument(
+        '--num-samples', '--num_samples',
+        type=int,
+        default=5,
+        help="Number of samples to evaluate (default: 5)",
+    )
+    parser.add_argument(
+        '--data-dir',
+        type=Path,
+        default=Path('.'),
+        help="Directory containing the inputs/ dataset directory (default: current directory)",
+    )
 
     args = parser.parse_args()
 
 
-    main(args.gpus,args.use_cudagraphs)
+    main(args.gpus, args.use_cudagraphs, args.num_samples, args.data_dir)
