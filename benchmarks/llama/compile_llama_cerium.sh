@@ -93,7 +93,7 @@ else
 fi
 
 # Generate shared global functions and the one-GPU-local functions once.
-# compile_configuration 1 1 0 0
+compile_configuration 1 1 0 0
 
 # Generate GPU-local functions for each multi-GPU topology.
 gpu_local_jobs=()
