@@ -106,7 +106,7 @@ PYBIND11_MODULE(_cerium_runtime, m) {
                                     const Ciphertext &input,
                                     const double scale) {
         return encryptor.decrypt_and_decode<std::complex<double>>(input, scale);
-      });
+      }, py::call_guard<py::gil_scoped_release>());
 
   py::class_<Cerium::Runtime::CKKSEncryptorContext>(
       m, "CKKSEncryptorContext", "Cerium Runtime CKKS Encryptor Context")
@@ -166,7 +166,8 @@ PYBIND11_MODULE(_cerium_runtime, m) {
            py::arg("raw_inputs_wrapper"), py::arg("encryptor_context"))
       .def("generate_ciphertext_inputs",
            &Cerium::Runtime::IOGenerator::
-               generate_ciphertext_inputs)
+               generate_ciphertext_inputs,
+           py::call_guard<py::gil_scoped_release>())
       .def_static(
           "deserialize_ciphertexts",
           [](const Cerium::Runtime::Context &context,
@@ -205,7 +206,8 @@ PYBIND11_MODULE(_cerium_runtime, m) {
       .def("get_program_outputs",
            &Cerium::Runtime::CeriumFunction::get_program_outputs)
       .def("copy_ciphertext_inputs_to_gpu",
-           &Cerium::Runtime::CeriumFunction::copy_ciphertext_inputs_to_gpu)
+           &Cerium::Runtime::CeriumFunction::copy_ciphertext_inputs_to_gpu,
+           py::call_guard<py::gil_scoped_release>())
 
       ;
 
@@ -232,5 +234,6 @@ PYBIND11_MODULE(_cerium_runtime, m) {
       }))
       .def("make_program", &Cerium::Runtime::Program::make_program,
            py::keep_alive<1, 0>())
-      .def("run", &Cerium::Runtime::Program::run_program);
+      .def("run", &Cerium::Runtime::Program::run_program,
+           py::call_guard<py::gil_scoped_release>());   // GIL released: the host encrypts the next clip meanwhile
 }
