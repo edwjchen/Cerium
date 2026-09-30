@@ -1,3 +1,5 @@
+#include <thread>
+#include <unordered_set>
 // SPDX-FileCopyrightText: Copyright (c) 2026 Siddharth Jayashankar. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -322,49 +324,65 @@ std::unordered_map<std::string, IOGenerator::RnsPolynomialPair> IOGenerator::gen
     return parse_runtime_io(line);
   };
 
-  auto encryptors = encryptor_context.create_encryptors(1);
-  auto & encryptor = encryptors.at(0);
+  // Collect the inputs first, then encrypt them in parallel: one encryptor per thread, like the
+  // plaintext generator below.  Sequential encryption cost 4.1 s per clip (= the FHE time itself)
+  // on the 2026-09-17 A100 pods; the per-clip cadence was 2x the inference.
+  struct PendingInput { std::string var; std::vector<std::uint32_t> rns_base_ids; };
+  std::vector<PendingInput> pending;
+  std::unordered_set<std::string> seen_vars;
   while (std::getline(input_file, line)) {
     if (line == ";") {
       complete = true;
       break;
     }
     auto parse = parse_io(line);
-    auto &term = parse.term;
     auto &var = parse.var;
-    auto &type = parse.type;
     auto &rns_base_ids = parse.rns_base_ids;
-    auto it = encrypted_inputs.find(var);
-    if (it == encrypted_inputs.end()) {
-      Cerium::Runtime::Utils::RawInputType raw_input;
-      try {
-        raw_input = raw_inputs.at(var);
-      } catch (const std::out_of_range &err) {
+    if (seen_vars.insert(var).second) {
+      if (raw_inputs.find(var) == raw_inputs.end()) {
         throw std::runtime_error("Raw Inputs key error: " + var);
       }
+      pending.push_back({var, rns_base_ids});
+    }
+  }
+  const int ENC_THREADS = static_cast<int>(std::min<size_t>(
+      pending.size(), std::max<size_t>(1, std::min<size_t>(32, std::thread::hardware_concurrency()))));
+  auto encryptors = encryptor_context.create_encryptors(std::max(ENC_THREADS, 1));
+  std::vector<std::unordered_map<std::string, std::pair<RnsPolynomialPtr, RnsPolynomialPtr>>>
+      thread_local_outputs(std::max(ENC_THREADS, 1));
+  auto encrypt_one = [&](int tid) {
+    auto &encryptor = encryptors.at(tid);
+    auto &out = thread_local_outputs.at(tid);
+    for (size_t k = tid; k < pending.size(); k += ENC_THREADS) {
+      auto &var = pending[k].var;
+      auto &rns_base_ids = pending[k].rns_base_ids;
+      const auto &raw_input = raw_inputs.at(var);
       auto &message = std::get<0>(raw_input);
       auto &scale = std::get<1>(raw_input);
       std::visit(Cerium::Runtime::Utils::overloaded{
-                      [](auto arg) {
-                        throw std::invalid_argument("Message" + std::string());
-                      },
-                      [&](const double &arg) {
-                        encrypted_inputs[var] = encryptor.encode_and_encrypt(
-                            arg, scale, rns_base_ids, pool_glo);
-                      },
-                      [&](const std::vector<double> &arg) {
-                        encrypted_inputs[var] = encryptor.encode_and_encrypt(
-                            arg, scale, rns_base_ids, pool_glo);
-                      },
-                      [&](const std::vector<std::complex<double>> &arg) {
-                        encrypted_inputs[var] = encryptor.encode_and_encrypt(
-                            arg, scale, rns_base_ids, pool_glo);
-                      }},
-                  message);
-      it = encrypted_inputs.find(var);
+                     [](auto arg) {
+                       throw std::invalid_argument("Message" + std::string());
+                     },
+                     [&](const double &arg) {
+                       out[var] = encryptor.encode_and_encrypt(arg, scale, rns_base_ids, pool_glo);
+                     },
+                     [&](const std::vector<double> &arg) {
+                       out[var] = encryptor.encode_and_encrypt(arg, scale, rns_base_ids, pool_glo);
+                     },
+                     [&](const std::vector<std::complex<double>> &arg) {
+                       out[var] = encryptor.encode_and_encrypt(arg, scale, rns_base_ids, pool_glo);
+                     }},
+                 message);
     }
+  };
+  {
+    std::vector<std::thread> threads;
+    for (int t = 0; t < ENC_THREADS; t++) threads.emplace_back(encrypt_one, t);
+    for (auto &t : threads) t.join();
   }
-
+  for (auto &m : thread_local_outputs) {
+    for (auto &kv : m) encrypted_inputs.emplace(kv.first, std::move(kv.second));
+  }
   if(!complete) {
     throw std::logic_error("Unexpected EOF");
   }
