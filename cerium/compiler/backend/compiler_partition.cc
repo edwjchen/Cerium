@@ -294,10 +294,14 @@ void CeriumCompiler::set_temporary_values() {
       auto &instrs = kg->instructions();
       for (auto &instr : instrs) {
         auto &dests = instr->dests();
+        // A rotation / conjugation tail is a scatter WRITE (ROT_WRITE), so its destination must be a
+        // real limb even when no other kernel reads it: a hoisted rotation whose amount was never
+        // consumed left an undeclared `v_t...` in a fused kernel (2026-09-17, kernels_118.cu).
+        const bool rot_like = instr->opcode() == OpCode::Rot || instr->opcode() == OpCode::Con;
         for (auto &dst : dests) {
           auto dst_idx = dst.term_idx();
           created_at_kg[dst_idx] = idx;
-          if (dst.is_output()) {
+          if (dst.is_output() || rot_like) {
             dst.set_temp(false);
           }
         }
