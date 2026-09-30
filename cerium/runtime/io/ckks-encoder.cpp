@@ -121,8 +121,8 @@ CKKSEncoder::encode_internal(double value, double scale,
   std::size_t coeff_count = context_.n();
 
   // Check that scale is positive and not too large
-  if (scale <= 0 || (static_cast<int>(log2(scale)) + 1 >=
-                     context_.rns_base_bit_count(num_limbs))) {
+  if (!cerium_allow_wrapped_plaintexts() && (scale <= 0 || (static_cast<int>(log2(scale)) + 1 >=
+                     context_.rns_base_bit_count(num_limbs)))) {
     throw std::invalid_argument("scale out of bounds");
   }
 
@@ -135,7 +135,7 @@ CKKSEncoder::encode_internal(double value, double scale,
   // int coeff_bit_count = static_cast<int>(log2(fabs(value))) + 2;
   int coeff_bit_count =
       static_cast<int>(std::ceil(std::log2(std::max<>(fabs(value), 1.0)))) + 1;
-  if (coeff_bit_count >= context_.rns_base_bit_count(num_limbs)) {
+  if (!cerium_allow_wrapped_plaintexts() && coeff_bit_count >= context_.rns_base_bit_count(num_limbs)) {
     throw std::invalid_argument("encoded value is too large");
   }
 
@@ -265,8 +265,8 @@ std::map<uint32_t, Limb::Element_t> CKKSEncoder::encode_internal_scalar(
   std::size_t coeff_count = context_.n();
 
   // Check that scale is positive and not too large
-  if (scale <= 0 || (static_cast<int>(log2(scale)) + 1 >=
-                     context_.rns_base_bit_count(num_limbs))) {
+  if (!cerium_allow_wrapped_plaintexts() && (scale <= 0 || (static_cast<int>(log2(scale)) + 1 >=
+                     context_.rns_base_bit_count(num_limbs)))) {
     throw std::invalid_argument("scale out of bounds");
   }
 
@@ -279,7 +279,7 @@ std::map<uint32_t, Limb::Element_t> CKKSEncoder::encode_internal_scalar(
   // int coeff_bit_count = static_cast<int>(log2(fabs(value))) + 2;
   int coeff_bit_count =
       static_cast<int>(std::ceil(std::log2(std::max<>(fabs(value), 1.0)))) + 1;
-  if (coeff_bit_count >= context_.rns_base_bit_count(num_limbs)) {
+  if (!cerium_allow_wrapped_plaintexts() && coeff_bit_count >= context_.rns_base_bit_count(num_limbs)) {
     throw std::invalid_argument("encoded value is too large");
   }
 

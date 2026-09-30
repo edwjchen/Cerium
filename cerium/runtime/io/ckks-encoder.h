@@ -30,6 +30,21 @@
 #include "cerium/runtime/polynomial/limb.h"
 #include "cerium/runtime/polynomial/rns_polynomial.h"
 #include <cassert>
+#include <cstdlib>
+// Ported from ButterscotchFHE (ckks-encoder.h): placed circuits can consume plaintexts whose
+// scale fills (or exceeds) the RNS basis at their level -- e.g. scale-56-bit addends at the
+// two-limb b33 bootstrap-input budget. Their wrapped (mod-Q) representation is exactly what the
+// homomorphic math needs and the Barrett-reduction encode computes it correctly, but it cannot
+// be requested through the default guards. CERIUM_ALLOW_WRAPPED_PLAINTEXTS=1 skips the
+// scale/magnitude bound checks on the encode paths. Unset = unchanged upstream behaviour.
+inline bool cerium_allow_wrapped_plaintexts() {
+  static const bool allow = []() {
+    const char *env = std::getenv("CERIUM_ALLOW_WRAPPED_PLAINTEXTS");
+    return env != nullptr && env[0] != '\0' && env[0] != '0';
+  }();
+  return allow;
+}
+
 
 namespace Cerium {
 namespace Runtime {
@@ -207,8 +222,8 @@ private:
     std::size_t coeff_count = context_.n();
 
     // Check that scale is positive and not too large
-    if (scale <= 0 || (static_cast<int>(log2(scale)) + 1 >=
-                       context_.rns_base_bit_count(num_limbs))) {
+    if (!cerium_allow_wrapped_plaintexts() && (scale <= 0 || (static_cast<int>(log2(scale)) + 1 >=
+                       context_.rns_base_bit_count(num_limbs)))) {
       throw std::invalid_argument("scale out of bounds");
     }
 
@@ -468,8 +483,8 @@ private:
     auto ntt_tables = context_.seal_ntt_tables();
 
     // Check that scale is positive and not too large
-    if (scale <= 0 || (static_cast<int>(log2(scale)) >=
-                       context_.rns_base_bit_count(num_limbs))) {
+    if (!cerium_allow_wrapped_plaintexts() && (scale <= 0 || (static_cast<int>(log2(scale)) >=
+                       context_.rns_base_bit_count(num_limbs)))) {
       throw std::invalid_argument("scale out of bounds");
     }
 
